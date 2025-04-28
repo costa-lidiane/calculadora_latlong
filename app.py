@@ -6,14 +6,14 @@ import streamlit as st
 @st.cache_data
 def carregar_base():
     bd_geo = pd.read_excel('NOVA_BASE_DE_GEOLOCALIZACAO.xlsx')
-    bd_geo = bd_geo[['SP', 'km', 'Latitude', 'Longitude']]
-    bd_geo['km'] = bd_geo['km'].astype(float)
+    bd_geo = bd_geo[['Rodovia', 'KM', 'lat', 'long']]
+    bd_geo['KM'] = bd_geo['KM'].astype(float)
     return bd_geo
 
 bd_geo = carregar_base()
 
 # Título do app
-st.title('Calculadora de Latitude/Longitude por Rodovia e KM')
+st.title('Calculadora de Latitude/Longitude por Rodovia e KM - DER SP')
 
 # Upload do arquivo
 arquivo = st.file_uploader("Envie o arquivo .xlsx com as colunas 'Rodovia' e 'KM'", type=["xlsx"])
@@ -25,19 +25,24 @@ if arquivo is not None:
     if {'Rodovia', 'KM'}.issubset(entrada.columns):
         entrada['KM'] = entrada['KM'].astype(float)
 
-        # Merge aproximado
-        resultado = entrada.merge(
-            bd_geo,
-            left_on=['Rodovia', 'KM'],
-            right_on=['SP', 'km'],
-            how='left'
-        )
+        # Inicializar colunas de resultado
+        entrada['lat'] = None
+        entrada['long'] = None
 
-        # Selecionar e renomear colunas para a saída
-        resultado_final = resultado[['Rodovia', 'KM', 'Latitude', 'Longitude']]
+        # Loop para busca aproximada
+        for idx, row in entrada.iterrows():
+            rodovia = row['Rodovia']
+            km = row['KM']
+
+            candidatos = bd_geo[(bd_geo['Rodovia'] == rodovia) & (bd_geo['KM'].between(km - 0.5, km + 0.5))]
+            if not candidatos.empty:
+                melhor = candidatos.iloc[(candidatos['KM'] - km).abs().argsort()].iloc[0]
+                entrada.at[idx, 'lat'] = melhor['lat']
+                entrada.at[idx, 'long'] = melhor['long']
 
         # Mostrar o resultado
-        st.write("### Resultado:", resultado_final)
+        st.success("Arquivo processado com sucesso!")
+        st.write("### Resultado:", entrada)
 
         # Download do resultado
         def converter_para_excel(df):
@@ -50,7 +55,7 @@ if arquivo is not None:
 
         st.download_button(
             label="⬇️ Baixar resultado em Excel",
-            data=converter_para_excel(resultado_final),
+            data=converter_para_excel(entrada),
             file_name='resultado_latlong.xlsx',
             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )

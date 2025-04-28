@@ -1,4 +1,3 @@
-
 import pandas as pd
 import streamlit as st
 
@@ -35,19 +34,24 @@ arquivo = st.file_uploader("Envie o arquivo .xlsx com as colunas 'Rodovia' e 'KM
 if arquivo is not None:
     entrada = pd.read_excel(arquivo)
 
+    # Checar se colunas necessárias estão presentes
     if {'Rodovia', 'KM'}.issubset(entrada.columns):
         entrada['KM'] = entrada['KM'].astype(float)
+
+        # Inicializar colunas de resultado
         entrada['lat'] = None
         entrada['long'] = None
 
+        # Para relatório
         encontrados = 0
         nao_encontrados = 0
 
+        # Loop para busca aproximada
         for idx, row in entrada.iterrows():
-            rodovia = str(row['Rodovia']).strip()
+            rodovia = str(row['Rodovia']).strip().upper()
             km = row['KM']
 
-            candidatos = bd_geo[(bd_geo['Rodovia'].str.strip() == rodovia) & (bd_geo['KM'].between(km - 0.5, km + 0.5))]
+            candidatos = bd_geo[(bd_geo['Rodovia'].str.strip().str.upper() == rodovia) & (bd_geo['KM'].between(km - 0.5, km + 0.5))]
             if not candidatos.empty:
                 melhor = candidatos.iloc[(candidatos['KM'] - km).abs().argsort()].iloc[0]
                 entrada.at[idx, 'lat'] = melhor['lat']
@@ -56,9 +60,11 @@ if arquivo is not None:
             else:
                 nao_encontrados += 1
 
+        # Mostrar o resultado
         st.success(f"Arquivo processado! {encontrados} correspondências encontradas e {nao_encontrados} não encontradas.")
         st.write("### Resultado:", entrada)
 
+        # Download do resultado
         def converter_para_excel(df):
             from io import BytesIO
             output = BytesIO()
@@ -73,6 +79,7 @@ if arquivo is not None:
             file_name='resultado_latlong.xlsx',
             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
+
     else:
         st.error("O arquivo precisa ter as colunas 'Rodovia' e 'KM'.")
 else:

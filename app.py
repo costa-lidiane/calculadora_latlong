@@ -5,8 +5,22 @@ import streamlit as st
 # Carregar base de dados BD_GEO (base oficial para consulta)
 @st.cache_data
 def carregar_base():
-    bd_geo = pd.read_excel('NOVA_BASE_DE_GEOLOCALIZACAO.xlsx')
-    bd_geo = bd_geo[['Rodovia', 'KM', 'lat', 'long']]
+    bd_geo = pd.read_excel('BASE_NEW.xlsx')
+
+    # Tentar reconhecer e renomear colunas, se necessário
+    if set(['SP', 'km', 'Latitude', 'Longitude']).issubset(bd_geo.columns):
+        bd_geo = bd_geo.rename(columns={
+            'SP': 'Rodovia',
+            'km': 'KM',
+            'Latitude': 'lat',
+            'Longitude': 'long'
+        })
+
+    # Garantir que as colunas certas existam
+    if not set(['Rodovia', 'KM', 'lat', 'long']).issubset(bd_geo.columns):
+        st.error("O arquivo de base não contém as colunas corretas: 'Rodovia', 'KM', 'lat', 'long'")
+        st.stop()
+
     bd_geo['KM'] = bd_geo['KM'].astype(float)
     return bd_geo
 
@@ -21,30 +35,30 @@ arquivo = st.file_uploader("Envie o arquivo .xlsx com as colunas 'Rodovia' e 'KM
 if arquivo is not None:
     entrada = pd.read_excel(arquivo)
 
-    # Checar se colunas necessárias estão presentes
     if {'Rodovia', 'KM'}.issubset(entrada.columns):
         entrada['KM'] = entrada['KM'].astype(float)
-
-        # Inicializar colunas de resultado
         entrada['lat'] = None
         entrada['long'] = None
 
-        # Loop para busca aproximada
+        encontrados = 0
+        nao_encontrados = 0
+
         for idx, row in entrada.iterrows():
-            rodovia = row['Rodovia']
+            rodovia = str(row['Rodovia']).strip()
             km = row['KM']
 
-            candidatos = bd_geo[(bd_geo['Rodovia'] == rodovia) & (bd_geo['KM'].between(km - 0.5, km + 0.5))]
+            candidatos = bd_geo[(bd_geo['Rodovia'].str.strip() == rodovia) & (bd_geo['KM'].between(km - 0.5, km + 0.5))]
             if not candidatos.empty:
                 melhor = candidatos.iloc[(candidatos['KM'] - km).abs().argsort()].iloc[0]
                 entrada.at[idx, 'lat'] = melhor['lat']
                 entrada.at[idx, 'long'] = melhor['long']
+                encontrados += 1
+            else:
+                nao_encontrados += 1
 
-        # Mostrar o resultado
-        st.success("Arquivo processado com sucesso!")
+        st.success(f"Arquivo processado! {encontrados} correspondências encontradas e {nao_encontrados} não encontradas.")
         st.write("### Resultado:", entrada)
 
-        # Download do resultado
         def converter_para_excel(df):
             from io import BytesIO
             output = BytesIO()
@@ -59,7 +73,6 @@ if arquivo is not None:
             file_name='resultado_latlong.xlsx',
             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-
     else:
         st.error("O arquivo precisa ter as colunas 'Rodovia' e 'KM'.")
 else:
